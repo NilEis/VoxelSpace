@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 
-    <title>Chip-8</title>
+    <title>VoxelSpace</title>
     <meta name="viewport" content="width=device-width">
 
 
@@ -27,6 +27,15 @@
     <p id="output">
     </p>
     {{{ SCRIPT }}}
+    <script async defer>
+        window.onload = () => {
+            VoxelSpace().then((module) => {
+                module.onRuntimeInitialized = () => {
+                    module._main();
+                };
+            });
+        }
+    </script>
 </body>
 
 </html>
