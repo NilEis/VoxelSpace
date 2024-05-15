@@ -4,9 +4,11 @@ project(VoxelSpace C)
 option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/options.cmake)
 
 create_resources(
-  ${CMAKE_CURRENT_SOURCE_DIR}/maps "map_" ${CMAKE_CURRENT_SOURCE_DIR}/src/maps.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/maps "map_"
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/maps.c
   ${CMAKE_CURRENT_SOURCE_DIR}/include/maps.h)
 
 set(CMAKE_C_STANDARD 23)
@@ -14,6 +16,9 @@ set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
             ${CMAKE_CURRENT_SOURCE_DIR}/src/maps.c)
 
 if(EMSCRIPTEN)
+  set(SUPPORT_CLANGD
+      OFF
+      CACHE BOOL "" FORCE)
   set(PLATFORM
       "Web"
       CACHE STRING "" FORCE)
