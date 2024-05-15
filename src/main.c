@@ -7,12 +7,13 @@
 #endif
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
-#define WIDTH 800
-#define HEIGHT 600
+#define WIDTH (400)
+#define HEIGHT (300)
 
-#define TEXTURE_WIDTH 400
-#define TEXTURE_HEIGHT 300
+#define TEXTURE_WIDTH (WIDTH / 2)
+#define TEXTURE_HEIGHT (HEIGHT / 2)
 
 void main_loop (void *arg);
 
@@ -72,6 +73,18 @@ void main_loop (void *arg)
 {
     voxel_space_t *voxel_space = arg;
     voxel_space->i++;
+    if (1)
+    {
+        memset (voxel_space->pixels,
+            0,
+            TEXTURE_HEIGHT * TEXTURE_WIDTH * sizeof (uint16_t));
+    }
+    else
+    {
+        free (voxel_space->pixels);
+        voxel_space->pixels
+            = calloc (TEXTURE_WIDTH * TEXTURE_HEIGHT, sizeof (uint16_t));
+    }
     for (int y = 0; y < TEXTURE_HEIGHT; y++)
     {
         for (int x = 0; x < TEXTURE_WIDTH; x++)
@@ -82,22 +95,27 @@ void main_loop (void *arg)
     }
     UpdateTexture (voxel_space->texture, voxel_space->pixels);
     BeginDrawing ();
-    DrawTexturePro (voxel_space->texture,
-        (Rectangle){
-            0, 0, voxel_space->texture.width, voxel_space->texture.height },
-        (Rectangle){ 0, 0, GetScreenWidth (), GetScreenHeight () },
-        (Vector2){ 0, 0 },
-        0,
-        WHITE);
-    DrawTexturePro (voxel_space->maps.height_map,
-        (Rectangle){ 0,
+    {
+        DrawTexturePro (voxel_space->texture,
+            (Rectangle){ 0,
+                0,
+                voxel_space->texture.width,
+                voxel_space->texture.height },
+            (Rectangle){ 0, 0, GetScreenWidth (), GetScreenHeight () },
+            (Vector2){ 0, 0 },
             0,
-            voxel_space->maps.height_map.width,
-            voxel_space->maps.height_map.height },
-        (Rectangle){ 0, 0, GetScreenWidth () / 2, GetScreenHeight () / 2 },
-        (Vector2){ 0, 0 },
-        0,
-        WHITE);
+            WHITE);
+        DrawTexturePro (voxel_space->maps.height_map,
+            (Rectangle){ 0,
+                0,
+                voxel_space->maps.height_map.width,
+                voxel_space->maps.height_map.height },
+            (Rectangle){ 0, 0, WIDTH / 2, HEIGHT / 2 },
+            (Vector2){ 0, 0 },
+            0,
+            WHITE);
+        DrawFPS (10, 10);
+    }
     EndDrawing ();
 #ifdef __EMSCRIPTEN__
     if (WindowShouldClose ())
