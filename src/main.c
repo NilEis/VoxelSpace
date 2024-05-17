@@ -10,8 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define WIDTH (800.0)
-#define HEIGHT (600.0)
+#define WIDTH (512.0)
+#define HEIGHT (512.0)
 
 #define TEXTURE_WIDTH (WIDTH / 2.0)
 #define TEXTURE_HEIGHT (HEIGHT / 2.0)
@@ -36,7 +36,7 @@ typedef struct
             Texture tex;
             struct
             {
-                uint32_t *buffer;
+                uint16_t *buffer;
                 uint16_t width;
                 uint16_t height;
             } data;
@@ -52,10 +52,12 @@ typedef struct
         double height;
         uint16_t scale_height;
         uint16_t horizon;
+        Vector2 view[3];
     } state;
 } voxel_space_t;
 
 void main_loop (void *arg);
+void update (voxel_space_t *voxel_space);
 void render (voxel_space_t *voxel_space);
 double get_height (voxel_space_t *voxel_space, const Vector2 *map_pos, int z);
 
@@ -66,9 +68,10 @@ int main (int argc, char const **argv)
     voxel_space.state.distance = 1000;
     voxel_space.state.height = 50;
     voxel_space.state.scale_height = 200;
-    voxel_space.state.horizon = HEIGHT / 2.0;
+    voxel_space.state.horizon = TEXTURE_HEIGHT / 2.0;
     InitWindow (WIDTH, HEIGHT, "VoxelSpace");
     {
+        TraceLog (LOG_INFO, "Loading buffer...");
         Image image = { .data = calloc (
                             TEXTURE_WIDTH * TEXTURE_HEIGHT, sizeof (uint16_t)),
             .width = TEXTURE_WIDTH,
@@ -77,30 +80,37 @@ int main (int argc, char const **argv)
             .mipmaps = 1 };
         voxel_space.texture = LoadTextureFromImage (image);
         UnloadImage (image);
-
+    }
+    {
+        TraceLog (LOG_INFO, "Loading height_map...");
         Image height_map = LoadImageFromMemory (
             ".png", map_1_height_png, map_1_height_png_size);
+        ImageFormat (&height_map, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE);
         voxel_space.maps.height.tex = LoadTextureFromImage (height_map);
-        Image color_map = LoadImageFromMemory (
-            ".png", map_1_color_png, map_1_color_png_size);
-        voxel_space.maps.color.tex = LoadTextureFromImage (color_map);
         voxel_space.maps.height.data.buffer
             = calloc (height_map.width * height_map.height, sizeof (uint8_t));
-        voxel_space.maps.color.data.buffer
-            = calloc (color_map.width * color_map.height, sizeof (uint32_t));
         memcpy (voxel_space.maps.height.data.buffer,
             height_map.data,
             height_map.width * height_map.height * sizeof (uint8_t));
-        memcpy (voxel_space.maps.color.data.buffer,
-            color_map.data,
-            color_map.width * color_map.height * sizeof (uint32_t));
-
         voxel_space.maps.height.data.width = height_map.width;
         voxel_space.maps.height.data.height = height_map.height;
+        UnloadImage (height_map);
+    }
+    {
+        TraceLog (LOG_INFO, "Loading color_map...");
+        Image color_map = LoadImageFromMemory (
+            ".png", map_1_color_png, map_1_color_png_size);
+        ImageFormat (&color_map, PIXELFORMAT_UNCOMPRESSED_R5G6B5);
+        voxel_space.maps.color.tex = LoadTextureFromImage (color_map);
+        voxel_space.maps.color.data.buffer
+            = calloc (color_map.width * color_map.height, sizeof (uint16_t));
+        memcpy (voxel_space.maps.color.data.buffer,
+            color_map.data,
+            color_map.width * color_map.height * sizeof (uint16_t));
+
         voxel_space.maps.color.data.width = color_map.width;
         voxel_space.maps.color.data.height = color_map.height;
 
-        UnloadImage (height_map);
         UnloadImage (color_map);
     }
     voxel_space.pixels
@@ -109,6 +119,7 @@ int main (int argc, char const **argv)
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop_arg (main_loop, &voxel_space, 0, 1);
 #else
+    SetTargetFPS (60);
     while (!WindowShouldClose ())
     {
         main_loop (&voxel_space);
@@ -129,12 +140,14 @@ int main (int argc, char const **argv)
 void main_loop (void *arg)
 {
     voxel_space_t *voxel_space = arg;
+    update (voxel_space);
     memset (voxel_space->pixels,
         0,
         TEXTURE_HEIGHT * TEXTURE_WIDTH * sizeof (uint16_t));
-
     render (voxel_space);
+
     UpdateTexture (voxel_space->texture, voxel_space->pixels);
+
     BeginDrawing ();
     {
         DrawTexturePro (voxel_space->texture,
@@ -146,6 +159,13 @@ void main_loop (void *arg)
             (Vector2){ 0, 0 },
             0,
             WHITE);
+        // DrawTexturePro (voxel_space->maps.color.tex,
+        //     (Rectangle){ 0,
+        //         0,
+        //         voxel_space->maps.color.tex.width,
+        //         voxel_space->maps.color.tex.height },
+        //     (Rectangle){ 0, 0, GetScreenWidth () / 4, GetScreenHeight () / 4
+        //     }, (Vector2){ 0, 0 }, 0, WHITE);
         DrawFPS (10, 10);
     }
     EndDrawing ();
@@ -155,6 +175,30 @@ void main_loop (void *arg)
         emscripten_cancel_main_loop ();
     }
 #endif
+}
+
+void update (voxel_space_t *voxel_space)
+{
+#define ROTATE_SPEED 0.1
+#define MOVE_SPEED 1
+    if (IsKeyDown (KEY_LEFT))
+    {
+        voxel_space->state.phi += ROTATE_SPEED;
+    }
+    if (IsKeyDown (KEY_RIGHT))
+    {
+        voxel_space->state.phi -= ROTATE_SPEED;
+    }
+    if (IsKeyDown (KEY_UP))
+    {
+        voxel_space->state.pos.x += -sin (voxel_space->state.phi);
+        voxel_space->state.pos.y += -cos (voxel_space->state.phi);
+    }
+    if (IsKeyDown (KEY_DOWN))
+    {
+        voxel_space->state.pos.x -= -sin (voxel_space->state.phi);
+        voxel_space->state.pos.y -= -cos (voxel_space->state.phi);
+    }
 }
 
 void render (voxel_space_t *voxel_space)
@@ -180,7 +224,7 @@ void render (voxel_space_t *voxel_space)
                   (-sinPhi * z - cosPhi * z) + voxel_space->state.pos.y };
 
         const double dx = (pright.x - pleft.x) / (double)TEXTURE_WIDTH;
-        const double dy = (pright.y - pleft.y) / (double)TEXTURE_HEIGHT;
+        const double dy = (pright.y - pleft.y) / (double)TEXTURE_WIDTH;
 
         for (int i = 0; i < TEXTURE_WIDTH; i++)
         {
@@ -200,6 +244,14 @@ void render (voxel_space_t *voxel_space)
                             + 1)))
                     % voxel_space->maps.height.data.height,
             };
+            if (((int)z == (voxel_space->state.distance - 1) || (int)z == 1)
+                && (i == 0 || i == TEXTURE_WIDTH - 1))
+            {
+                voxel_space->state.view[z == 1.0 ? 0 : (i == 0 ? 1 : 2)].x
+                    = map_pos.x;
+                voxel_space->state.view[z == 1.0 ? 0 : (i == 0 ? 1 : 2)].y
+                    = map_pos.y;
+            }
             uint16_t height_on_screen = get_height (voxel_space, &map_pos, z);
             if (voxel_space->hbuffer[i] >= height_on_screen)
             {
@@ -207,24 +259,22 @@ void render (voxel_space_t *voxel_space)
                 {
                     height_on_screen = 0;
                 }
+                if (voxel_space->hbuffer[i] >= TEXTURE_HEIGHT)
+                {
+                    voxel_space->hbuffer[i] = TEXTURE_HEIGHT - 1;
+                }
                 const uint16_t color = voxel_space->maps.color.data.buffer[(
                     int)(map_pos.y * voxel_space->maps.color.data.width
                          + map_pos.x)];
-                const uint8_t r
-                    = ((double)((color >> 16) & 0xFF) / 255.0) * 0b11111;
-                const uint8_t g
-                    = ((double)((color >> 8) & 0xFF) / 255.0) * 0b111111;
-                const uint8_t b
-                    = ((double)((color >> 0) & 0xFF) / 255.0) * 0b11111;
-                for (int y = (int)voxel_space->hbuffer[i];
-                     y >= height_on_screen;
-                     y--)
+                const int start = (int)voxel_space->hbuffer[i];
+                for (int y = start; y > height_on_screen; y--)
                 {
-                    voxel_space->pixels[y * (int)TEXTURE_WIDTH + i]
-                        = (r << 11) | (g << 5) | b;
+                    const int tw = (int)TEXTURE_WIDTH;
+                    const int index = y * tw + i;
+                    voxel_space->pixels[index] = color;
                 }
             }
-            if (height_on_screen < voxel_space->hbuffer[i])
+            if (height_on_screen < (int)voxel_space->hbuffer[i])
             {
                 voxel_space->hbuffer[i] = height_on_screen;
             }
